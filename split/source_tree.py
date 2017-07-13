@@ -241,6 +241,21 @@ class Node(object):
                                           node.target_file))
 
 
+    def split(self, separator, orig_child, left_child, right_child):
+        """
+        :type separator: Separator
+        :type orig_child: Node
+        :type left_child: Node
+        :type right_child: Node
+        :rtype left_node: Node
+        :rtype right_node: Node
+        ----
+        Split node according to an input separator plus the split nodes from
+        lower layer. Return the two new nodes after splitting.
+        """
+        pass
+
+
     def __repr__(self):
         return "<Node S: {} D: {}>".format(basename(self.orig_file), basename(self.target_file))
 
@@ -289,6 +304,7 @@ class Flow(object):
         #     node = matching_nodes[-1]
         if not len(matching_nodes) == 1:
             raise ValueError("Invalid separator {}".format(separator))
+        node = matching_nodes[0]
         orig_child, left_child, right_child = None, None, None
         line_num = separator.line_num
         while node:
@@ -296,12 +312,13 @@ class Flow(object):
             # if node is virtual top node, then do not split. Replace original
             # child with left_child and right_child.
             if node.orig_file == "__VIRTUAL_TOP__":
-                idx_child = node.childs.index((orig_child.line_num, orig_child))
-                node.childs[idx_child : (idx_child+1)] = [(0, left_child),
-                                                          (0, right_child)]
-                left_child.parent = node
-                right_child.parent = node
+                self.split_root_node(orig_child, left_child, right_child)
                 break
+            else:
+                orig_child, left_child, right_child = node.split(
+                    separator, orig_child, left_child, right_child)
+                line_num = orig_child.line_num
+
             # Calculate name of new node on left.
             # Skip attaching stage name if it already exists.
             if basename(node.orig_file) != basename(node.target_file):
@@ -354,12 +371,18 @@ class Flow(object):
                                   left_name=left_target,
                                   right_name=right_target,
                                   line_num=line_num)
-            # Go to upper layer in next iteration.
-            line_num = node.line_num
-            orig_child = node
-            left_child = left_node
-            right_child = right_node
-            node = node.parent
+
+
+    def split_root_node(self, orig_child, left_child, right_child):
+        """
+        Split root virtual node.
+        """
+        idx_child = self.root.childs.index((orig_child.line_num, orig_child))
+        self.root.childs[idx_child : (idx_child+1)] = [(0, left_child),
+                                                       (0, right_child)]
+        left_child.parent = self.root
+        right_child.parent = self.root
+
 
 
     def update_separator(self, file_name, left_name, right_name, line_num):
