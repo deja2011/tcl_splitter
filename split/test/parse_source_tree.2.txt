@@ -1,0 +1,10 @@
+top.tcl
+2 lv1.1.tcl
+  2 lv2.1.tcl
+    2 lv3.1.tcl
+    4 lv3.2.tcl
+    6 lv3.3.tcl
+      2 lv4.1.tcl
+        2 lv5.1.tcl
+  4 lv2.2.tcl
+4 lv1.2.tcl
