@@ -220,7 +220,7 @@ class Node(object):
             yield node
 
 
-    def export(self, unit_indents=2, fout=sys.stdout):
+    def export_source_tree(self, unit_indents=2, fout=sys.stdout):
         """
         Show content of a node.
         """
@@ -369,29 +369,11 @@ class Flow(object):
         right_child.parent = self.root
 
 
-    def update_separator(self, file_name, left_name, right_name, line_num):
+    def build(self, output_dir=""):
         """
-        :type file_name: path
-        :type left_name: path
-        :type right_name: path
-        :type line_num: int
-        ----
-        Update remaining separators according to a node split.
+        :type output_dir: path
         """
-        for separator in self.separators:
-            if separator.file_name == file_name:
-                if separator.line_num > line_num:
-                    separator.file_name = right_name
-                    separator.line_num -= line_num
-                else:
-                    separator.file_name = left_name
-
-
-    def build(self):
-        """
-        :type dest: str
-        :rtype res: bool
-        """
+        self.dedup()
         for separator in self.separators:
             self.split(separator)
 
@@ -425,7 +407,7 @@ class SourceTreeTestCase(unittest.TestCase):
 
     def test_parse_source_tree(self):
         """
-        Test if Node.parse and Node.export works correctly.
+        Test if Node.parse and Node.export_source_tree works correctly.
         """
         print()
         for i in count(start=1, step=1):
@@ -436,7 +418,7 @@ class SourceTreeTestCase(unittest.TestCase):
             node = Node()
             fout = io.StringIO()
             node.parse(source_tree_file)
-            node.export(fout=fout)
+            node.export_source_tree(fout=fout)
             fin = open(source_tree_file)
             self.assertEqual(fout.getvalue(), fin.read())
             fin.close()
@@ -446,7 +428,7 @@ class SourceTreeTestCase(unittest.TestCase):
 
     def test_dedup(self):
         """
-        Test if Node.parse and Node.export works correctly.
+        Test if Node.dedup works correctly.
         """
         print()
         for i in count(start=1, step=1):
@@ -463,7 +445,7 @@ class SourceTreeTestCase(unittest.TestCase):
             flow = Flow(source_tree_file=input_file,
                         separator_file=sept_file)
             duplicates = sorted(flow.dedup())
-            flow.root.childs[0][1].export(fout=fout)
+            flow.root.childs[0][1].export_source_tree(fout=fout)
             ref_source_tree = fin_source_tree.read()
             ref_duplicates = sorted(fin_duplicates.read().splitlines())
             self.assertEqual(fout.getvalue(), ref_source_tree)
@@ -476,7 +458,7 @@ class SourceTreeTestCase(unittest.TestCase):
 
     def test_split(self):
         """
-        Test if Node.parse and Node.export works correctly.
+        Test if Node.split works correctly.
         """
         print()
         for i in count(start=1, step=1):
@@ -491,7 +473,7 @@ class SourceTreeTestCase(unittest.TestCase):
             flow = Flow(source_tree_file=input_file,
                         separator_file=input_spt_file)
             flow.build()
-            flow.root.export(fout=fout)
+            flow.root.export_source_tree(fout=fout)
             content_out = fout.getvalue()
             content_ref = ref_fid.read()
             self.assertEqual(content_out, content_ref)
