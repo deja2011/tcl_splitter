@@ -111,8 +111,6 @@ class Separator(object):
             raise ValueError("Invalid value on RHS. Must be a path string.")
         self._file_name = value
 
-# Separator = namedtuple('Separator', ['last_stage', 'next_stage', 'line_num', 'file_name'])
-
 
 
 class Node(object):
@@ -124,17 +122,9 @@ class Node(object):
     def __init__(self, orig_file="", parent=None, line_num=0):
         self.orig_file = orig_file
         if orig_file and isfile(orig_file):
-            self.ranges = [(1, get_num_lines(self.orig_file))]
+            self.scope = [1, get_num_lines(self.orig_file)]
         else:
-            self.ranges = [(0, 0)]
-        # if orig_file and isfile(orig_file):
-        #     start = 1
-        # else:
-        #     self.start = 0
-        # if orig_file and isfile(orig_file):
-        #     self.end = get_num_lines(self.orig_file)
-        # else:
-        #     self.end = 0
+            self.scope = [0, 0]
         self.parent = parent
         self.line_num = line_num
         self.childs = list()
@@ -163,9 +153,12 @@ class Node(object):
         """
         Query command of target file name.
         """
-        segments = basename(self.orig_file).split(".")
-        segments.insert(-1, self.stage)
-        return opjoin(dirname(self.orig_file), ".".join(segments))
+        if self.stage:
+            segments = basename(self.orig_file).split(".")
+            segments.insert(-1, self.stage)
+            return opjoin(dirname(self.orig_file), ".".join(segments))
+        else:
+            return self.orig_file
 
 
     def add_child(self, orig_file, start=0, end=0, line_num=0):
@@ -173,8 +166,7 @@ class Node(object):
         Create child script node and link to parent node.
         """
         child = Node(orig_file=orig_file, parent=self, line_num=line_num)
-        child.stage = "none"
-        child.ranges = [(start, end)]
+        child.scope = [start, end]
         self.childs.append((line_num, child))
         return child
 
@@ -199,16 +191,20 @@ class Node(object):
                 if current_indents == indents - 2:
                     current_node = current_node.childs[-1][-1]
                     current_indents += 1
-                    current_node.add_child(orig_file=file_name, line_num=line_num)
+                    current_node.add_child(orig_file=file_name,
+                                           line_num=line_num)
                 elif current_indents == indents - 1:
-                    current_node.add_child(orig_file=file_name, line_num=line_num)
+                    current_node.add_child(orig_file=file_name,
+                                           line_num=line_num)
                 elif current_indents == indents:
                     current_node = current_node.parent
-                    current_node.add_child(orig_file=file_name, line_num=line_num)
+                    current_node.add_child(orig_file=file_name,
+                                           line_num=line_num)
                 else:
                     for _ in range(current_indents - indents + 1):
                         current_node = current_node.parent
-                    current_node.add_child(orig_file=file_name, line_num=line_num)
+                    current_node.add_child(orig_file=file_name,
+                                           line_num=line_num)
                     current_indents = indents - 1
 
 
@@ -241,9 +237,12 @@ class Node(object):
                                           node.target_file))
 
 
-    def split(self, separator, orig_child, left_child, right_child):
+    def split(self, last_stage, next_stage, line_num,
+                   orig_child, left_child, right_child):
         """
-        :type separator: Separator
+        :type last_stage: string
+        :type next_stage: string
+        :type line_num: int
         :type orig_child: Node
         :type left_child: Node
         :type right_child: Node
@@ -253,11 +252,37 @@ class Node(object):
         Split node according to an input separator plus the split nodes from
         lower layer. Return the two new nodes after splitting.
         """
-        pass
+        # Implement left node, link left node and left child node.
+        left_node = Node(orig_file=self.orig_file)
+        left_node.stage = last_stage
+        left_node.scope = [self.scope[0], line_num]
+        left_node.childs = [t for t in self.childs if t[0] < line_num]
+        for _, child_node in left_node.childs:
+            child_node.parent = left_node
+        if left_child:
+            left_node.childs.append((line_num, left_child))
+            left_child.parent = left_node
+            left_child.line_num = line_num
+        # Implement right node, link right node and right child node.
+        right_node = Node(orig_file=self.orig_file)
+        right_node.stage = next_stage
+        right_node.scope = [line_num, self.scope[1]]
+        right_node.childs = [(t[0] - line_num + 1, t[1]) for t in self.childs
+                             if t[0] > line_num]
+        for _, child_node in right_node.childs:
+            child_node.parent = right_node
+            child_node.line_num -= (line_num - 1)
+        if right_child:
+            right_node.childs.insert(0, (1, right_child))
+            right_child.parent = right_node
+            right_child.line_num = 1
+        # Return left child and right child
+        return left_node, right_node
 
 
     def __repr__(self):
-        return "<Node S: {} D: {}>".format(basename(self.orig_file), basename(self.target_file))
+        return "<Node S: {} D: {}>".format(basename(self.orig_file),
+                                           basename(self.target_file))
 
 
 
@@ -293,84 +318,44 @@ class Flow(object):
         matching_nodes = [n for n in self.root.iter_dfs()
                           if n.orig_file == separator.file_name and
                           n.stage in (separator.last_stage, None)]
-        # if not matching_nodes:
-        #     print("separator file name:", separator.file_name)
-        # if len(matching_nodes) == 1:
-        #     node = matching_nodes[0]
-        # else:
-        #     matching_nodes = [n for n in matching_nodes
-        #                       if n.target_file.split(".")[-2] ==
-        #                       separator.last_stage]
-        #     node = matching_nodes[-1]
-        if not len(matching_nodes) == 1:
-            raise ValueError("Invalid separator {}".format(separator))
-        node = matching_nodes[0]
+        node = matching_nodes[-1]
         orig_child, left_child, right_child = None, None, None
-        line_num = separator.line_num
+        line_num = separator.line_num - node.scope[0] + 1
         while node:
-            print("Going to split node", node)
             # if node is virtual top node, then do not split. Replace original
             # child with left_child and right_child.
             if node.orig_file == "__VIRTUAL_TOP__":
                 self.split_root_node(orig_child, left_child, right_child)
                 break
             else:
-                orig_child, left_child, right_child = node.split(
-                    separator, orig_child, left_child, right_child)
+                left_child, right_child = node.split(
+                    separator.last_stage, separator.next_stage, line_num,
+                    orig_child, left_child, right_child)
+                orig_child = node
+                node = node.parent
                 line_num = orig_child.line_num
 
-            # Calculate name of new node on left.
-            # Skip attaching stage name if it already exists.
-            if basename(node.orig_file) != basename(node.target_file):
-                left_target = node.target_file
+
+    def dedup(self):
+        """
+        :rtype: list(str)
+        ----
+        Remove duplicated child nodes that points to the same file.
+        After dedup a script can only appear once in the source tree.
+        Return a list of file names of duplicated scripts.
+        """
+        all_scripts = list()
+        self.duplicates = list()
+        for node in self.root.iter_dfs():
+            if node.orig_file not in all_scripts:
+                all_scripts.append(node.orig_file)
             else:
-                segments = basename(node.target_file).split(".")
-                segments.insert(-1, separator.last_stage)
-                left_target = opjoin(dirname(node.target_file),
-                                     ".".join(segments))
-            # Implement left node, link left node and left child node.
-            left_node = Node(orig_file=node.orig_file,
-                             target_file=left_target,
-                             parent=None,
-                             line_num=0)
-            left_node.start = node.nodestart
-            left_node.end = (line_num if left_child else (line_num - 1))
-            left_node.childs = [t for t in node.childs if t[0] < line_num]
-            for _, child_node in left_node.childs:
-                child_node.parent = left_node
-            if left_child:
-                left_node.childs.append((line_num, left_child))
-                left_child.parent = left_node
-                left_child.line_num = line_num
-            # Calculate name of new node on right.
-            # Replace stage name if necessary.
-            segments = basename(node.target_file).split(".")
-            if segments[-2] == separator.last_stage:
-                segments[-2] = separator.next_stage
-            else:
-                segments.insert(-1, separator.next_stage)
-            right_target = opjoin(dirname(node.target_file),
-                                  ".".join(segments))
-            # Implement right node, link right node and right child node.
-            right_node = Node(orig_file=node.orig_file,
-                              target_file=right_target,
-                              parent=None,
-                              line_num=0)
-            right_node.start = (line_num if right_child else (line_num + 1))
-            right_node.end = node.end
-            right_node.childs = [(t[0] - line_num, t[1]) for t in node.childs
-                                 if t[0] > line_num]
-            for _, child_node in right_node.childs:
-                child_node.parent = right_node
-            if right_child:
-                right_node.childs.insert(0, (1, right_child))
-                right_child.parent = right_node
-                right_child.line_num = 1
-            # Update remaining separators.
-            self.update_separator(file_name=node.target_file,
-                                  left_name=left_target,
-                                  right_name=right_target,
-                                  line_num=line_num)
+                idx_child = node.parent.childs.index((node.line_num, node))
+                node.parent.childs = node.parent.childs[:idx_child] + \
+                        node.parent.childs[idx_child+1:]
+                if node.orig_file not in self.duplicates:
+                    self.duplicates.append(node.orig_file)
+        return self.duplicates
 
 
     def split_root_node(self, orig_child, left_child, right_child):
@@ -382,7 +367,6 @@ class Flow(object):
                                                        (0, right_child)]
         left_child.parent = self.root
         right_child.parent = self.root
-
 
 
     def update_separator(self, file_name, left_name, right_name, line_num):
@@ -410,10 +394,6 @@ class Flow(object):
         """
         for separator in self.separators:
             self.split(separator)
-            fout = io.StringIO()
-            self.root.export(fout=fout)
-            print("\n---- OUTPUT ----\n" + fout.getvalue())
-            fout.close()
 
 
     @staticmethod
@@ -422,30 +402,11 @@ class Flow(object):
         :type separator_file: path
         :type separators: list<Separator>
         """
-        return [Separator(line) for line in
-                open(separator_file).read().splitlines()]
-
-
-    def dedup(self):
-        """
-        :rtype: list(str)
-
-        Remove duplicated child nodes that points to the same file.
-        After dedup a script can only appear once in the source tree.
-        Return a list of file names of duplicated scripts.
-        """
-        all_scripts = list()
-        self.duplicates = list()
-        for node in self.root.iter_dfs():
-            if node.orig_file not in all_scripts:
-                all_scripts.append(node.orig_file)
-            else:
-                idx_child = node.parent.childs.index((node.line_num, node))
-                node.parent.childs = node.parent.childs[:idx_child] + \
-                        node.parent.childs[idx_child+1:]
-                if node.orig_file not in self.duplicates:
-                    self.duplicates.append(node.orig_file)
-        return self.duplicates
+        separator_fid = open(separator_file)
+        separators = [Separator(line) for line in
+                separator_fid.read().splitlines()]
+        separator_fid.close()
+        return separators
 
 
     def reorder(self):
@@ -454,9 +415,6 @@ class Flow(object):
         are consistent with order of source command appearance.
         """
         pass
-
-
-
 
 
 
@@ -494,6 +452,7 @@ class SourceTreeTestCase(unittest.TestCase):
         for i in count(start=1, step=1):
             input_file = 'test/dedup.{}.input.txt'.format(i)
             ref_file = 'test/dedup.{}.ref.txt'.format(i)
+            sept_file = 'test/dedup.{}.separators.txt'.format(i)
             dup_file = 'test/dedup.{}.dups.txt'.format(i)
             if not isfile(input_file):
                 break
@@ -501,7 +460,8 @@ class SourceTreeTestCase(unittest.TestCase):
             fin_source_tree = open(ref_file)
             fin_duplicates = open(dup_file)
             fout = io.StringIO()
-            flow = Flow(source_tree_file=input_file)
+            flow = Flow(source_tree_file=input_file,
+                        separator_file=sept_file)
             duplicates = sorted(flow.dedup())
             flow.root.childs[0][1].export(fout=fout)
             ref_source_tree = fin_source_tree.read()
@@ -540,26 +500,5 @@ class SourceTreeTestCase(unittest.TestCase):
             print('PASS')
 
 
-def manual_test():
-    """
-    Manual test. Yes I'm idiot in PDB.
-    """
-    i = 3
-    input_file = 'test/split.{}.source_tree.txt'.format(i)
-    input_spt_file = 'test/split.{}.separators.txt'.format(i)
-    ref_file = 'test/split.{}.ref.txt'.format(i)
-    fout = io.StringIO()
-    ref_fid = open(ref_file)
-    flow = Flow(source_tree_file=input_file, separator_file=input_spt_file)
-    flow.build()
-    flow.root.export(fout=fout)
-    content_out = fout.getvalue()
-    content_ref = ref_fid.read()
-    print("\n---- OUTPUT ----\n" + content_out + "\n---- REF ----\n" + content_ref)
-    # self.assertEqual(fout.getvalue(), ref_fid.read())
-    ref_fid.close()
-
-
 if __name__ == "__main__":
-    # unittest.main()
-    manual_test()
+    unittest.main()
