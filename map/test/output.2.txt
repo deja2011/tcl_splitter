@@ -1,0 +1,2 @@
+/slowfs/pv_prj07/dcrt_opt-20150720/desport/pvrepo_tools.dev/prs_builder CONSTRAINT/scripts/prs_builder
+/slowfs/pv_prj07/dcrt_opt-20150720/desport/yadir CONSTRAINT/scripts/yadir

@@ -1,0 +1,5 @@
+/this/path/does/not/exist/top.tcl
+8 /slowfs/pv_prj07/dcrt_opt-20150720/desport/yadir/source_1.tcl
+10 /slowfs/pv_prj07/dcrt_opt-20150720/desport/pvrepo_tools.dev/prs_builder/source_2.tcl
+  88 /slowfs/pv_prj07/dcrt_opt-20150720/desport/yadir/ya_child_dir/source_1.tcl
+  388 /slowfs/pv_prj07/rtlfp/desport/yadir/source_1.tcl
