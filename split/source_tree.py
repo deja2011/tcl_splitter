@@ -280,6 +280,19 @@ class Node(object):
         return left_node, right_node
 
 
+    def build(self, target_dir):
+        """
+        Build script in target directory.
+        ----
+        :type target_dir: path
+        """
+        makedirs(target_dir, exist_ok=True)
+        lines = open(self.orig_file).read().splitlines()
+        fout = open(self.target_file, 'a')
+        fout.write('\n'.join(lines[self.scope[0]-1 : self.scope[1]-1]))
+        fout.close()
+
+
     def __repr__(self):
         return "<Node S: {} D: {}>".format(basename(self.orig_file),
                                            basename(self.target_file))
@@ -291,14 +304,17 @@ class Flow(object):
     Data structure of a flow. Consists of a source tree of nodes.
     """
 
-    def __init__(self, source_tree_file, separator_file=""):
+    def __init__(self, source_tree_file, separator_file="", mapping_file=""):
         self.root = Node(orig_file="__VIRTUAL_TOP__")
         real_top_node = Node()
         real_top_node.parse(source_tree_file=source_tree_file)
         real_top_node.parent = self.root
         self.root.childs = [(0, real_top_node)]
         self.duplicates = list()
-        self.separators = self.load_separators(separator_file)
+        if separator_file:
+            self.separators = self.load_separators(separator_file)
+        if mapping_file:
+            self.mapping = self.load_mapping(mapping_file)
 
 
     def split(self, separator):
@@ -376,19 +392,42 @@ class Flow(object):
         self.dedup()
         for separator in self.separators:
             self.split(separator)
+        if not output_dir:
+            pass
+        elif isdir(output_dir):
+            print("Error: Output directory {} already exists.".format(
+                output_dir))
+        else:
+            for node in self.root.iter_dfs():
+                target_dir = opjoin(output_dir,
+                                    self.mapping[dirname(node.orig_file)])
+                node.build(target_dir=target_dir)
 
 
     @staticmethod
     def load_separators(separator_file):
         """
         :type separator_file: path
-        :type separators: list<Separator>
+        :rtype separators: list<Separator>
         """
         separator_fid = open(separator_file)
         separators = [Separator(line) for line in
                 separator_fid.read().splitlines()]
         separator_fid.close()
         return separators
+
+
+    @staticmethod
+    def load_mapping(mapping_file):
+        """
+        :type mapping_file: path
+        :rtype mapping: dict<path : path>
+        """
+        mapping_fid = open(mapping_file)
+        mapping = {t[0] : t[1] for t in
+                   [line.split() for line in mapping_fid.read().splitlines()]}
+        mapping_fid.close()
+        return mapping
 
 
     def reorder(self):
