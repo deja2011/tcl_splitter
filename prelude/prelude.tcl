@@ -111,7 +111,7 @@ proc prelude::start_track_source {args} {
 }
 
 proc prelude::source_wrapper {args} {
-    set indent 2
+    set indent "  "
     set line_number [dict get [info frame [expr {[info frame] - $prelude::frame_step}]] line]
     set script_path [file normalize [info script]]
     foreach arg $args {
@@ -123,7 +123,7 @@ proc prelude::source_wrapper {args} {
         }
     }
     puts "PRELUDE: source at $line_number $script_path" 
-    puts -nonewline ${prelude::source_report} [string repeat " " [expr {$prelude::source_level * $indent}]
+    puts -nonewline ${prelude::source_report} [string repeat $indent $prelude::source_level]
     puts ${prelude::source_report} "$line_number $target_path"
     incr prelude::source_level
     uplevel 1 ::the_real_source $args
