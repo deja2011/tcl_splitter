@@ -7,31 +7,51 @@ Build PRS directory from run directory of original testcase, with prelude enable
 
 
 import argparse
-import logging
-import os
+# import logging
+# import os
+import sys
+
+from source_tree import Flow
 
 
-
-
-def main(args):
+def build_dir(args):
     """
-    Main function
+    Build PRS design directory.
     """
-    logging.error("Hello World!")
-    logging.error(args.run_dir)
-    logging.error(args.output_dir)
-    logging.error(os.getcwd())
+    flow = Flow(source_tree_file=args.source_tree,
+                separator_file=args.separators,
+                mapping_file=args.mapping)
+    flow.build(args.output)
 
 
-
+def main(*args):
+    """
+    main function for argument parsing.
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-t', '--source_tree',
+                        help="specify path to source tree file.",
+                        required=True)
+    parser.add_argument('-s', '--separators',
+                        help="specify path to separators file.",
+                        required=True)
+    parser.add_argument('-m', '--mapping',
+                        help="specify path to path mapping file.",
+                        required=True)
+    parser.add_argument('-o', '--output',
+                        help="specify path to output directory. "
+                        "Output directory is equivalent to DCRT_user_data "
+                        "or DC_user_data",
+                        required=True)
+    parser.add_argument('-f', '--force', action='store_true',
+                        help="force to remove output directory if it exists.")
+    parser.add_argument('--suffix', default="CONSTRAINT/scripts",
+                        help="relative path to non-PRS-interfaced scripts."
+                        "Defaults to CONSTRAINT/scripts.")
+    parser.set_defaults(func=build_dir)
+    args = parser.parse_args()
+    args.func(args)
 
 
 if __name__ == "__main__":
-    PARSER = argparse.ArgumentParser()
-    PARSER.add_argument('-r', '--run_dir', required=True)
-    PARSER.add_argument('-o', '--output_dir', required=True)
-    PARSER.set_defaults(func=main)
-    ARGS = PARSER.parse_args()
-    ARGS.func(ARGS)
-
-
+    main(sys.argv[1:])

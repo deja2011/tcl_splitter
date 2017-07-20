@@ -52,7 +52,7 @@ def main(*args):
     """
     main function for argument parsing.
     """
-    parser = argparse.ArgumentParser
+    parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--source_tree',
                         help="specify path to source tee file.",
                         required=True)
@@ -64,7 +64,7 @@ def main(*args):
     parser.add_argument('--suffix', default="CONSTRAINT/scripts",
                         help="relative path to non-PRS-interfaced scripts.")
     parser.set_defaults(func=generate_path_mapping)
-    args = parser.parse_args(args)
+    args = parser.parse_args()
     args.func(args)
 
 

@@ -8,7 +8,8 @@ import re
 import sys
 # import os
 import io
-from os.path import basename, dirname, isfile
+from os import makedirs
+from os.path import basename, dirname, isfile, isdir
 from os.path import join as opjoin
 
 import unittest
@@ -129,6 +130,7 @@ class Node(object):
         self.line_num = line_num
         self.childs = list()
         self._stage = None
+        self.target_dir = ""
 
 
     @property
@@ -156,9 +158,12 @@ class Node(object):
         if self.stage:
             segments = basename(self.orig_file).split(".")
             segments.insert(-1, self.stage)
-            return opjoin(dirname(self.orig_file), ".".join(segments))
+            target_file = opjoin(dirname(self.orig_file), ".".join(segments))
         else:
-            return self.orig_file
+            target_file = self.orig_file
+        if self.target_dir:
+            target_file = opjoin(target_dir, basename(target_file))
+        return target_file
 
 
     def add_child(self, orig_file, start=0, end=0, line_num=0):
@@ -168,6 +173,7 @@ class Node(object):
         child = Node(orig_file=orig_file, parent=self, line_num=line_num)
         child.scope = [start, end]
         self.childs.append((line_num, child))
+        print("added child {} to {}".format(child, self))
         return child
 
 
@@ -201,8 +207,9 @@ class Node(object):
                     current_node.add_child(orig_file=file_name,
                                            line_num=line_num)
                 else:
-                    for _ in range(current_indents - indents + 1):
+                    for _ in range(current_indents - indents):
                         current_node = current_node.parent
+                        print("backtrace current node to {}.".format(current_node))
                     current_node.add_child(orig_file=file_name,
                                            line_num=line_num)
                     current_indents = indents - 1
@@ -238,12 +245,11 @@ class Node(object):
 
 
     def split(self, last_stage, next_stage, line_num,
-                   orig_child, left_child, right_child):
+              left_child, right_child):
         """
         :type last_stage: string
         :type next_stage: string
         :type line_num: int
-        :type orig_child: Node
         :type left_child: Node
         :type right_child: Node
         :rtype left_node: Node
@@ -280,7 +286,7 @@ class Node(object):
         return left_node, right_node
 
 
-    def build(self, target_dir):
+    def build(self, target_dir, is_top=False):
         """
         Build script in target directory.
         ----
@@ -288,7 +294,12 @@ class Node(object):
         """
         makedirs(target_dir, exist_ok=True)
         lines = open(self.orig_file).read().splitlines()
-        fout = open(self.target_file, 'a')
+        if is_top:
+            print("Export top node {}.".format(self))
+            target_file = opjoin(target_dir, '{}.tcl'.format(self.stage))
+        else:
+            target_file = opjoin(target_dir, basename(self.target_file))
+        fout = open(target_file, 'a')
         fout.write('\n'.join(lines[self.scope[0]-1 : self.scope[1]-1]))
         fout.close()
 
@@ -346,7 +357,7 @@ class Flow(object):
             else:
                 left_child, right_child = node.split(
                     separator.last_stage, separator.next_stage, line_num,
-                    orig_child, left_child, right_child)
+                    left_child, right_child)
                 orig_child = node
                 node = node.parent
                 line_num = orig_child.line_num
@@ -392,16 +403,24 @@ class Flow(object):
         self.dedup()
         for separator in self.separators:
             self.split(separator)
+        self.root.export_source_tree()
         if not output_dir:
-            pass
+            return
         elif isdir(output_dir):
             print("Error: Output directory {} already exists.".format(
                 output_dir))
-        else:
-            for node in self.root.iter_dfs():
+            return
+        for node in self.root.iter_dfs():
+            if node.orig_file == "__VIRTUAL_TOP__":
+                continue
+            elif node.orig_file == self.root.childs[0][1].orig_file:
+                target_dir = opjoin(output_dir, 'CONSTRAINT')
+                is_top = True
+            else:
                 target_dir = opjoin(output_dir,
                                     self.mapping[dirname(node.orig_file)])
-                node.build(target_dir=target_dir)
+                is_top = False
+            node.build(target_dir=target_dir, is_top=is_top)
 
 
     @staticmethod
@@ -412,7 +431,7 @@ class Flow(object):
         """
         separator_fid = open(separator_file)
         separators = [Separator(line) for line in
-                separator_fid.read().splitlines()]
+                      separator_fid.read().splitlines()]
         separator_fid.close()
         return separators
 
